@@ -11,6 +11,7 @@ ByteTrack algoritması ile bu nesneleri kareler boyunca takip eder.
 from __future__ import annotations
 
 import math
+import numpy as np
 import sys
 from typing import TYPE_CHECKING
 

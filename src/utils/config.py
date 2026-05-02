@@ -34,3 +34,8 @@ OUTPUT_TRACKED_VIDEO_PATH = "outputs/tracked_output.mp4"
 ENABLE_YOLO      = True   # YOLOv8 detection
 ENABLE_BYTETRACK = True   # ByteTrack persistent tracking (Part 2)
 OCCLUSION_TEST_MODE = False  # Set True to enable occlusion diagnostics overlay
+
+# --- Performance Tuning ---
+DEPTH_EVERY_N_FRAMES: int = 3   # run MiDaS depth estimation only every Nth frame to reduce CPU load
+FLOW_EVERY_N_FRAMES:  int = 2   # run Optical Flow estimation only every Nth frame to reduce CPU load
+FRAME_SCALE: float = 0.5        # downscale input frames before all processing (0.5 = 50% resolution)

@@ -101,8 +101,8 @@ def main() -> None:
     # 4. VideoWriter — always on when YOLO is active
     writer = None
     if config.ENABLE_YOLO:
-        fw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        fh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)  * config.FRAME_SCALE)
+        fh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) * config.FRAME_SCALE)
         fps_cam = cap.get(cv2.CAP_PROP_FPS) or 30.0
         fourcc  = cv2.VideoWriter_fourcc(*"mp4v")
         # Save to tracked path when ByteTrack is on, else detection path
@@ -117,6 +117,8 @@ def main() -> None:
     frame_num    = 0
     fps_smoothed = 0.0
     alpha        = 0.1
+    depth_map    = None   # cached; updated every DEPTH_EVERY_N_FRAMES frames
+    motion_map   = None   # cached; updated every FLOW_EVERY_N_FRAMES frames
     print("Application started. Press 'q' to quit.\n")
 
     try:
@@ -128,16 +130,31 @@ def main() -> None:
                 print("Frame grab failed — exiting.")
                 break
 
+            # Downscale for all processing — display still uses this smaller frame
+            if config.FRAME_SCALE != 1.0:
+                frame = cv2.resize(
+                    frame,
+                    (0, 0),
+                    fx=config.FRAME_SCALE,
+                    fy=config.FRAME_SCALE,
+                    interpolation=cv2.INTER_LINEAR,
+                )
+
             frame_num += 1
 
-            # --- Core pipeline ---
-            depth_map   = depth_estimator.estimate(frame)
-            motion_map  = flow_estimator.estimate(frame)
-            motion_score, depth_score, delta_d, approach_score, danger_score = \
-                analyzer.analyze(motion_map, depth_map)
+            # --- Core pipeline (frame-skipped to reduce CPU load) ---
+            if frame_num % config.DEPTH_EVERY_N_FRAMES == 0:
+                depth_map = depth_estimator.estimate(frame)
 
-            # --- Logging ---
-            logger.log(frame_num, motion_score, depth_score, delta_d, approach_score, danger_score)
+            if frame_num % config.FLOW_EVERY_N_FRAMES == 0:
+                motion_map = flow_estimator.estimate(frame)
+            if depth_map is not None and motion_map is not None:
+                motion_score, depth_score, delta_d, approach_score, danger_score = \
+                    analyzer.analyze(motion_map, depth_map)
+                logger.log(frame_num, motion_score, depth_score, delta_d, approach_score, danger_score)
+            else:
+                # Not enough frames yet — use safe defaults for HUD
+                motion_score = depth_score = delta_d = approach_score = danger_score = 0.0
 
             # --- Build display frame ---
             display_frame = frame.copy()
