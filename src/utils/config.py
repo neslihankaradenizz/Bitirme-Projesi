@@ -33,3 +33,4 @@ OUTPUT_TRACKED_VIDEO_PATH = "outputs/tracked_output.mp4"
 # --- Feature Flags ---
 ENABLE_YOLO      = True   # YOLOv8 detection
 ENABLE_BYTETRACK = True   # ByteTrack persistent tracking (Part 2)
+OCCLUSION_TEST_MODE = False  # Set True to enable occlusion diagnostics overlay

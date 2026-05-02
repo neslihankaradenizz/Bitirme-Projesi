@@ -9,6 +9,7 @@ Pipeline:
 Press 'q' to quit.
 """
 
+import collections
 import os
 import sys
 import time
@@ -87,6 +88,9 @@ def main() -> None:
         except ImportError as exc:
             print(f"[main] WARNING: {exc}\n       Continuing without YOLO.")
 
+    # Occlusion test: rolling window of track-ID sets over the last 10 frames
+    _occ_window: collections.deque[set[int]] = collections.deque(maxlen=10)
+
     # 3. Open camera
     print(f"Opening camera {config.CAMERA_INDEX} …")
     cap = cv2.VideoCapture(config.CAMERA_INDEX)
@@ -153,6 +157,28 @@ def main() -> None:
                     det["motion_score"] = motion_score
 
                 _draw_yolo(display_frame, detections)
+
+            # --- ID-switch telemetry (every 30 frames, ByteTrack only) ---
+            if frame_num % 30 == 0 and detector is not None:
+                logger.log_id_switches(frame_num, detector.get_id_switch_count())
+
+            # --- Occlusion diagnostic overlay ---
+            if config.OCCLUSION_TEST_MODE and use_track and detector is not None:
+                visible_ids: set[int] = {
+                    det["track_id"] for det in detections
+                    if det.get("track_id") is not None
+                }
+                _occ_window.append(visible_ids)
+                expected_ids: set[int] = set().union(*_occ_window)
+                hidden_count = len(expected_ids - visible_ids)
+                logger.log_occlusion(frame_num, hidden_count)
+
+                _yel = (0, 255, 255)  # yellow in BGR
+                cv2.putText(display_frame, "OCCLUSION TEST ACTIVE",
+                            (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.65, _yel, 2, cv2.LINE_AA)
+                if hidden_count > 0:
+                    cv2.putText(display_frame, f"Hidden objects: {hidden_count}",
+                                (10, 148), cv2.FONT_HERSHEY_SIMPLEX, 0.65, _yel, 2, cv2.LINE_AA)
 
             # HUD overlay on top
             display_frame = draw_hud(display_frame, danger_score, config.DANGER_THRESHOLD, frame_num)

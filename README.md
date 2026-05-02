@@ -1,3 +1,4 @@
+ .\venv\Scripts\activate
 # Real-Time Hazard and Collision Detection MVP
 
 Real-time hazard and collision detection system prototype designed to assist visually impaired users. This system combines Monocular Depth Estimation (MiDaS) and Optical Flow to calculate danger scores from a live webcam feed.

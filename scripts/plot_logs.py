@@ -7,6 +7,57 @@ import glob
 import pandas as pd
 import matplotlib.pyplot as plt
 
+def plot_object_count(log_path: str) -> None:
+    """Plot per-frame object count (left axis) and cumulative ID switches (right axis) — Figure 7."""
+    df = pd.read_csv(log_path)
+    if df.empty:
+        print(f"[plot_object_count] File is empty: {log_path}")
+        return
+
+    # Normalise column names to lower-case stripped strings
+    df.columns = [c.strip().lower() for c in df.columns]
+
+    if "frame" not in df.columns or "object_count" not in df.columns:
+        print(
+            f"[plot_object_count] Expected columns 'frame' and 'object_count' in {log_path}.\n"
+            f"  Found: {list(df.columns)}"
+        )
+        return
+
+    fig, ax1 = plt.subplots(figsize=(12, 5))
+
+    # Primary Y-axis — detected object count (blue solid)
+    ax1.set_xlabel("Frame")
+    ax1.set_ylabel("Detected Object Count", color="steelblue")
+    ax1.plot(df["frame"], df["object_count"], color="steelblue",
+             linewidth=1.8, label="Object Count")
+    ax1.tick_params(axis="y", labelcolor="steelblue")
+
+    # Secondary Y-axis — cumulative ID switch count (red dashed)
+    if "id_switch_count" in df.columns:
+        ax2 = ax1.twinx()
+        ax2.set_ylabel("Cumulative ID Switch Count", color="crimson")
+        ax2.plot(df["frame"], df["id_switch_count"], color="crimson",
+                 linewidth=1.5, linestyle="--", label="ID Switches (cumulative)")
+        ax2.tick_params(axis="y", labelcolor="crimson")
+        # Merge legends
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left")
+    else:
+        ax1.legend(loc="upper left")
+        print("[plot_object_count] Column 'id_switch_count' not found — skipping secondary axis.")
+
+    plt.title("Detected Object Count Over Time (Figure 7)")
+    plt.tight_layout()
+
+    os.makedirs("outputs", exist_ok=True)
+    out_path = os.path.join("outputs", "figure7_object_count.png")
+    plt.savefig(out_path, dpi=150)
+    print(f"[plot_object_count] Saved → {out_path}")
+    plt.show()
+
+
 def main():
     """
     logs/ dizinindeki en sondosyasini  bulur ve 
@@ -59,6 +110,13 @@ def main():
     print(f"Saved plot to {output_path}")
     
     plt.show()
+
+    # --- Figure 7: object count over time ---
+    id_switch_csv = os.path.join("logs", "id_switches.csv")
+    if os.path.isfile(id_switch_csv):
+        plot_object_count(id_switch_csv)
+    else:
+        print(f"[main] id_switches.csv not found — skipping Figure 7 (run with ENABLE_BYTETRACK=True first).")
 
 if __name__ == "__main__":
     main()

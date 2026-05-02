@@ -10,6 +10,7 @@ ByteTrack algoritması ile bu nesneleri kareler boyunca takip eder.
 
 from __future__ import annotations
 
+import math
 import sys
 from typing import TYPE_CHECKING
 
@@ -33,6 +34,59 @@ def _require_ultralytics() -> None:
             "Fix:  pip install ultralytics\n"
             "      — or — pip install -r requirements.txt\n"
         )
+
+
+# ---------------------------------------------------------------------------
+# IDSwitchCounter
+# ---------------------------------------------------------------------------
+
+class IDSwitchCounter:
+    """Counts how many times a detection center switches track_id between frames."""
+
+    _DIST_THRESHOLD: float = 50.0  # px — centres closer than this are "same object"
+
+    def __init__(self) -> None:
+        """Initialise counter and previous-frame cache."""
+        self._count: int = 0
+        # Previous frame: list of (cx, cy, track_id)
+        self._prev: list[tuple[float, float, int]] = []
+
+    def update(self, detections: list[dict]) -> None:
+        """Compare current detections against the previous frame and count ID switches."""
+        current: list[tuple[float, float, int]] = []
+        for det in detections:
+            tid = det.get("track_id")
+            if tid is None:
+                # ByteTrack disabled — nothing to count
+                self._prev = []
+                return
+            x1, y1, x2, y2 = det["bbox"]
+            cx = (x1 + x2) / 2.0
+            cy = (y1 + y2) / 2.0
+            current.append((cx, cy, tid))
+
+        # For each previous detection, look for the nearest current centre
+        for px, py, p_tid in self._prev:
+            best_dist = float("inf")
+            best_tid: int | None = None
+            for cx, cy, c_tid in current:
+                d = math.hypot(cx - px, cy - py)
+                if d < best_dist:
+                    best_dist = d
+                    best_tid = c_tid
+            if best_tid is not None and best_dist < self._DIST_THRESHOLD and best_tid != p_tid:
+                self._count += 1
+
+        self._prev = current
+
+    def get(self) -> int:
+        """Return the cumulative ID-switch count since last reset."""
+        return self._count
+
+    def reset(self) -> None:
+        """Reset the cumulative counter and clear the previous-frame cache."""
+        self._count = 0
+        self._prev = []
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +139,7 @@ class ObjectTracker:
             conf_threshold if conf_threshold is not None else _default_conf
         )
         self.model = YOLO(model_path)
+        self._id_switch_counter = IDSwitchCounter()
         print(
             f"[ObjectTracker] Model '{model_path}' loaded  "
             f"conf={self.conf_threshold:.2f}"
@@ -132,7 +187,21 @@ class ObjectTracker:
             persist=True,               # keeps the tracker state across calls
             verbose=False,
         )
-        return self._parse(results, with_ids=True)
+        detections = self._parse(results, with_ids=True)
+        self._id_switch_counter.update(detections)
+        return detections
+
+    # ------------------------------------------------------------------
+    # ID-switch counter public API
+    # ------------------------------------------------------------------
+
+    def get_id_switch_count(self) -> int:
+        """Return the cumulative number of ID switches detected since last reset."""
+        return self._id_switch_counter.get()
+
+    def reset_id_switch_count(self) -> None:
+        """Reset the ID-switch counter and clear the previous-frame cache."""
+        self._id_switch_counter.reset()
 
     # ------------------------------------------------------------------
     # Internal
